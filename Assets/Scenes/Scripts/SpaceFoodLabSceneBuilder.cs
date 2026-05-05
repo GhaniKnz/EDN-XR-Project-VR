@@ -6,6 +6,8 @@ public class SpaceFoodLabSceneBuilder : MonoBehaviour
     [Header("Scene globale")]
     [SerializeField] private bool buildOnStart = true;
     [SerializeField] private bool clearChildrenBeforeBuild = true;
+    [SerializeField] private bool useSkyboxBackground = true;
+    [SerializeField] private Material skyboxMaterial;
 
     [Header("Palette")]
     [SerializeField] private Color floorColor = new Color(0.10f, 0.12f, 0.16f, 1f);
@@ -43,6 +45,7 @@ public class SpaceFoodLabSceneBuilder : MonoBehaviour
     public void BuildScene()
     {
         PrepareScene();
+        ApplySkybox();
         CreateMaterials();
 
         GameObject root = new GameObject("SpaceFoodLab_Root");
@@ -76,6 +79,15 @@ public class SpaceFoodLabSceneBuilder : MonoBehaviour
         }
     }
 
+    private void ApplySkybox()
+    {
+        if (!useSkyboxBackground || skyboxMaterial == null)
+            return;
+
+        RenderSettings.skybox = skyboxMaterial;
+        DynamicGI.UpdateEnvironment();
+    }
+
     private void CreateMaterials()
     {
         floorMat = CreateLitMaterial("FloorMat", floorColor, 0.25f, 0.7f);
@@ -91,16 +103,20 @@ public class SpaceFoodLabSceneBuilder : MonoBehaviour
 
     private void CreateFloor(Transform parent)
     {
+        GameObject ground = new GameObject("Ground");
+        ground.transform.SetParent(parent, false);
+        ground.transform.localScale = new Vector3(2f, 2f, 2f);
+
         GameObject floor = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         floor.name = "MainFloor";
-        floor.transform.SetParent(parent, false);
+        floor.transform.SetParent(ground.transform, false);
         floor.transform.localPosition = new Vector3(0f, -0.25f, 0f);
         floor.transform.localScale = new Vector3(roomRadius, 0.25f, roomRadius);
         floor.GetComponent<Renderer>().sharedMaterial = floorMat;
 
         GameObject innerRing = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         innerRing.name = "InnerRing";
-        innerRing.transform.SetParent(parent, false);
+        innerRing.transform.SetParent(ground.transform, false);
         innerRing.transform.localPosition = new Vector3(0f, -0.18f, 0f);
         innerRing.transform.localScale = new Vector3(roomRadius * 0.72f, 0.05f, roomRadius * 0.72f);
         innerRing.GetComponent<Renderer>().sharedMaterial = accentMat;
@@ -192,13 +208,16 @@ public class SpaceFoodLabSceneBuilder : MonoBehaviour
 
     private void CreateExteriorSpace(Transform parent)
     {
-        GameObject starSphere = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-        starSphere.name = "SpaceSphere";
-        starSphere.transform.SetParent(parent, false);
-        starSphere.transform.localPosition = new Vector3(0f, roomHeight * 0.45f, 0f);
-        starSphere.transform.localScale = new Vector3(120f, 120f, 120f);
-        starSphere.GetComponent<Renderer>().sharedMaterial = spaceMat;
-        DestroyCollider(starSphere);
+        if (!useSkyboxBackground)
+        {
+            GameObject starSphere = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            starSphere.name = "SpaceSphere";
+            starSphere.transform.SetParent(parent, false);
+            starSphere.transform.localPosition = new Vector3(0f, roomHeight * 0.45f, 0f);
+            starSphere.transform.localScale = new Vector3(120f, 120f, 120f);
+            starSphere.GetComponent<Renderer>().sharedMaterial = spaceMat;
+            DestroyCollider(starSphere);
+        }
 
         CreateStars(parent, 140);
 

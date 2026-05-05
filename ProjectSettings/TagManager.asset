@@ -6,6 +6,7 @@ TagManager:
   tags:
   - RightHand
   - LeftHand
+  - Player
   layers:
   - Default
   - TransparentFX
