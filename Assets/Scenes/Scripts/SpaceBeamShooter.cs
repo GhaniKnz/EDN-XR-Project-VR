@@ -83,7 +83,7 @@ public class SpaceBeamShooter : MonoBehaviour
             end = hit.point;
             SpaceFoodPickup food = hit.collider.GetComponentInParent<SpaceFoodPickup>();
             if (food != null)
-                food.Collect();
+                food.HitByShot();
             else
                 hit.collider.GetComponentInParent<SpaceHazardItem>()?.HitByShot();
         }

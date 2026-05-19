@@ -21,7 +21,7 @@ public class SpaceHazardItem : MonoBehaviour
         _rb.isKinematic = true;
         _rb.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
 
-        float s = Random.Range(0.7f, 1.8f);
+        float s = Random.Range(0.55f, 1.25f);
         transform.localScale = Vector3.Scale(
             transform.localScale,
             new Vector3(s * Random.Range(0.8f, 1.2f), s, s * Random.Range(0.8f, 1.2f))

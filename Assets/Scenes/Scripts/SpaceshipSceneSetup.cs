@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Unity.XR.CoreUtils;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -29,6 +30,11 @@ public class SpaceshipSceneSetup : MonoBehaviour
     [SerializeField] private Color shipAccentColor = new Color(0.25f,  0.85f,  1f);
     [SerializeField] private Color engineGlowColor = new Color(0.4f,   0.7f,   1f);
 
+    [Header("Food Prefabs")]
+    [SerializeField] private GameObject[] foodPrefabs;
+    [SerializeField] private float foodPrefabScale = 1f;
+    [SerializeField] private float proceduralFoodScale = 1.35f;
+
     // Matériaux créés au runtime
     private Material _skyMat, _starMat, _bodyMat, _accentMat, _engineMat, _asteroidMat, _foodMat;
 
@@ -40,25 +46,36 @@ public class SpaceshipSceneSetup : MonoBehaviour
     [ContextMenu("Build Spaceship Scene")]
     public void Build()
     {
+        CleanupGeneratedScene();
         EnsureEventSystem();
         CreateMaterials();
 
         Transform env = NewRoot("Environment");
         BuildSpaceSphere(env);
         BuildStars(env);
-        BuildNebulae(env);
-        BuildPlanets(env);
         SetupLighting();
 
         Transform shipRoot = NewRoot("ShipRoot");
         GameObject ship = BuildShip(shipRoot);
+        env.gameObject.AddComponent<SpaceEnvironmentFollow>().Init(ship.transform);
 
-        GameObject foodTemplate    = BuildFoodTemplate();
+        GameObject[] foodTemplates = BuildFoodTemplates();
         GameObject hazardTemplate  = BuildHazardTemplate();
 
-        SetupGameManager(ship, foodTemplate, hazardTemplate);
+        SetupGameManager(ship, foodTemplates, hazardTemplate);
         SetupCameraFollow(ship.transform);
         SetupHUD();
+    }
+
+    private void CleanupGeneratedScene()
+    {
+        string[] generatedRoots = { "Environment", "ShipRoot", "SpaceGameManager" };
+        foreach (string rootName in generatedRoots)
+        {
+            GameObject existing = GameObject.Find(rootName);
+            if (existing != null)
+                Destroy(existing);
+        }
     }
 
     // ─── Matériaux ────────────────────────────────────────────────────────────────
@@ -73,7 +90,7 @@ public class SpaceshipSceneSetup : MonoBehaviour
         _bodyMat     = MakeLit(lit, shipBodyColor, 0.65f, 0.7f);
         _accentMat   = MakeEmissive(lit, new Color(0.05f, 0.15f, 0.22f), shipAccentColor * 2f);
         _engineMat   = MakeEmissive(lit, new Color(0.05f, 0.1f,  0.2f),  engineGlowColor * 3f);
-        _asteroidMat = MakeLit(lit, new Color(0.015f, 0.014f, 0.018f), 0.02f, 0.08f);
+        _asteroidMat = MakeLit(lit, new Color(0.30f, 0.24f, 0.20f), 0.02f, 0.16f);
         _foodMat     = MakeEmissive(lit, new Color(0.15f, 0.15f, 0.15f), Color.white * 1.5f);
     }
 
@@ -172,6 +189,8 @@ public class SpaceshipSceneSetup : MonoBehaviour
         SpaceshipMover mover = ship.AddComponent<SpaceshipMover>();
         mover.Init(meshRoot.transform);
 
+        ship.AddComponent<SpaceShipCollisionDamage>();
+
         SpaceBeamShooter shooter = ship.AddComponent<SpaceBeamShooter>();
         shooter.Init(firePoint.transform);
 
@@ -193,16 +212,143 @@ public class SpaceshipSceneSetup : MonoBehaviour
 
     // ─── Templates food / astéroïde ───────────────────────────────────────────────
 
-    private GameObject BuildFoodTemplate()
+    private GameObject[] BuildFoodTemplates()
     {
-        GameObject go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-        go.name = "FoodTemplate";
-        go.transform.SetParent(transform, false);
-        go.transform.localScale = Vector3.one * 0.75f;
-        go.GetComponent<Renderer>().sharedMaterial = _foodMat;
-        go.GetComponent<Collider>().isTrigger = true;
-        go.AddComponent<SpaceFoodPickup>();
+        List<GameObject> templates = new List<GameObject>();
+
+        if (foodPrefabs != null)
+        {
+            foreach (GameObject prefab in foodPrefabs)
+            {
+                if (prefab == null) continue;
+
+                GameObject instance = Instantiate(prefab, transform.position, Quaternion.identity, transform);
+                instance.name = prefab.name + "_FoodTemplate";
+                instance.transform.localScale *= foodPrefabScale;
+                bool isBurger = instance.name.ToLowerInvariant().Contains("burger");
+                PrepareFoodTemplate(instance, isBurger, isBurger ? 0.18f : 0f);
+                templates.Add(instance);
+            }
+        }
+
+        if (templates.Count == 0)
+        {
+            templates.Add(BuildBurgerTemplate());
+            templates.Add(BuildPizzaTemplate());
+            templates.Add(BuildDonutTemplate());
+            templates.Add(BuildEnergyCanTemplate());
+        }
+
+        return templates.ToArray();
+    }
+
+    private void PrepareFoodTemplate(GameObject go, bool growsShipOnCollision, float shipGrowthAmount)
+    {
+        Collider collider = go.GetComponent<Collider>();
+        if (collider == null)
+        {
+            SphereCollider sphere = go.AddComponent<SphereCollider>();
+            sphere.radius = 0.85f;
+            collider = sphere;
+        }
+
+        collider.isTrigger = true;
+
+        SpaceFoodPickup pickup = go.GetComponent<SpaceFoodPickup>();
+        if (pickup == null)
+            pickup = go.AddComponent<SpaceFoodPickup>();
+        pickup.Configure(growsShipOnCollision, shipGrowthAmount);
+
         go.SetActive(false);
+    }
+
+    private GameObject BuildBurgerTemplate()
+    {
+        GameObject root = NewFoodRoot("BurgerFoodTemplate", 0.95f);
+
+        Material bunMat = MakeLit(Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard"), new Color(0.95f, 0.62f, 0.26f), 0f, 0.35f);
+        Material pattyMat = MakeLit(Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard"), new Color(0.22f, 0.09f, 0.04f), 0f, 0.22f);
+        Material cheeseMat = MakeEmissive(Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard"), new Color(1f, 0.72f, 0.08f), new Color(1f, 0.35f, 0.04f));
+        Material saladMat = MakeLit(Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard"), new Color(0.25f, 0.85f, 0.18f), 0f, 0.25f);
+
+        Prim("TopBun", PrimitiveType.Sphere, root.transform, new Vector3(0f, 0.33f, 0f), Vector3.zero, new Vector3(0.9f, 0.28f, 0.9f), bunMat, false);
+        Prim("Salad", PrimitiveType.Cylinder, root.transform, new Vector3(0f, 0.12f, 0f), Vector3.zero, new Vector3(0.82f, 0.08f, 0.82f), saladMat, false);
+        Prim("Cheese", PrimitiveType.Cube, root.transform, new Vector3(0f, 0.02f, 0f), new Vector3(0f, 45f, 0f), new Vector3(1f, 0.08f, 1f), cheeseMat, false);
+        Prim("Patty", PrimitiveType.Cylinder, root.transform, new Vector3(0f, -0.12f, 0f), Vector3.zero, new Vector3(0.78f, 0.16f, 0.78f), pattyMat, false);
+        Prim("BottomBun", PrimitiveType.Sphere, root.transform, new Vector3(0f, -0.31f, 0f), Vector3.zero, new Vector3(0.84f, 0.2f, 0.84f), bunMat, false);
+
+        PrepareFoodTemplate(root, growsShipOnCollision: true, shipGrowthAmount: 0.18f);
+        return root;
+    }
+
+    private GameObject BuildPizzaTemplate()
+    {
+        GameObject root = NewFoodRoot("PizzaSliceFoodTemplate", 1f);
+
+        Material crustMat = MakeLit(Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard"), new Color(0.9f, 0.54f, 0.2f), 0f, 0.28f);
+        Material cheeseMat = MakeEmissive(Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard"), new Color(1f, 0.78f, 0.18f), new Color(1f, 0.35f, 0.05f));
+        Material pepperoniMat = MakeLit(Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard"), new Color(0.78f, 0.12f, 0.08f), 0f, 0.25f);
+
+        Prim("Slice", PrimitiveType.Cube, root.transform, new Vector3(0f, 0f, 0f), new Vector3(0f, 25f, 0f), new Vector3(0.95f, 0.09f, 1.3f), cheeseMat, false);
+        Prim("Crust", PrimitiveType.Cylinder, root.transform, new Vector3(0f, 0.05f, -0.62f), new Vector3(90f, 0f, 0f), new Vector3(0.52f, 0.16f, 0.52f), crustMat, false);
+        Prim("Pepperoni_A", PrimitiveType.Sphere, root.transform, new Vector3(-0.24f, 0.12f, 0.08f), Vector3.zero, Vector3.one * 0.16f, pepperoniMat, false);
+        Prim("Pepperoni_B", PrimitiveType.Sphere, root.transform, new Vector3(0.22f, 0.12f, 0.28f), Vector3.zero, Vector3.one * 0.14f, pepperoniMat, false);
+        Prim("Pepperoni_C", PrimitiveType.Sphere, root.transform, new Vector3(0.08f, 0.12f, -0.26f), Vector3.zero, Vector3.one * 0.13f, pepperoniMat, false);
+
+        PrepareFoodTemplate(root, growsShipOnCollision: false, shipGrowthAmount: 0f);
+        return root;
+    }
+
+    private GameObject BuildDonutTemplate()
+    {
+        GameObject root = NewFoodRoot("DonutFoodTemplate", 0.92f);
+
+        Material doughMat = MakeLit(Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard"), new Color(0.82f, 0.46f, 0.2f), 0f, 0.32f);
+        Material glazeMat = MakeEmissive(Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard"), new Color(1f, 0.35f, 0.68f), new Color(1f, 0.12f, 0.45f) * 1.5f);
+
+        for (int i = 0; i < 10; i++)
+        {
+            float a = i * Mathf.PI * 2f / 10f;
+            Vector3 pos = new Vector3(Mathf.Cos(a) * 0.38f, 0f, Mathf.Sin(a) * 0.38f);
+            Prim("Dough_" + i, PrimitiveType.Sphere, root.transform, pos, Vector3.zero, new Vector3(0.34f, 0.18f, 0.34f), doughMat, false);
+        }
+
+        for (int i = 0; i < 8; i++)
+        {
+            float a = i * Mathf.PI * 2f / 8f;
+            Vector3 pos = new Vector3(Mathf.Cos(a) * 0.38f, 0.12f, Mathf.Sin(a) * 0.38f);
+            Prim("Glaze_" + i, PrimitiveType.Sphere, root.transform, pos, Vector3.zero, new Vector3(0.22f, 0.07f, 0.22f), glazeMat, false);
+        }
+
+        PrepareFoodTemplate(root, growsShipOnCollision: false, shipGrowthAmount: 0f);
+        return root;
+    }
+
+    private GameObject BuildEnergyCanTemplate()
+    {
+        GameObject root = NewFoodRoot("EnergyCanFoodTemplate", 0.9f);
+
+        Material canMat = MakeLit(Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard"), new Color(0.08f, 0.12f, 0.18f), 0.75f, 0.65f);
+        Material labelMat = MakeEmissive(Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard"), new Color(0.05f, 0.65f, 1f), new Color(0.05f, 0.55f, 1f) * 2f);
+        Material capMat = MakeLit(Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard"), new Color(0.78f, 0.86f, 0.92f), 0.8f, 0.7f);
+
+        Prim("CanBody", PrimitiveType.Cylinder, root.transform, Vector3.zero, Vector3.zero, new Vector3(0.38f, 0.82f, 0.38f), canMat, false);
+        Prim("Label", PrimitiveType.Cube, root.transform, new Vector3(0f, 0f, -0.39f), Vector3.zero, new Vector3(0.52f, 0.58f, 0.035f), labelMat, false);
+        Prim("TopCap", PrimitiveType.Cylinder, root.transform, new Vector3(0f, 0.44f, 0f), Vector3.zero, new Vector3(0.4f, 0.05f, 0.4f), capMat, false);
+        Prim("BottomCap", PrimitiveType.Cylinder, root.transform, new Vector3(0f, -0.44f, 0f), Vector3.zero, new Vector3(0.4f, 0.05f, 0.4f), capMat, false);
+
+        PrepareFoodTemplate(root, growsShipOnCollision: false, shipGrowthAmount: 0f);
+        return root;
+    }
+
+    private GameObject NewFoodRoot(string name, float colliderRadius)
+    {
+        GameObject go = new GameObject(name);
+        go.transform.SetParent(transform, false);
+        go.transform.localScale = Vector3.one * proceduralFoodScale;
+        SphereCollider collider = go.AddComponent<SphereCollider>();
+        collider.radius = colliderRadius;
+        collider.isTrigger = true;
         return go;
     }
 
@@ -211,7 +357,7 @@ public class SpaceshipSceneSetup : MonoBehaviour
         GameObject go = GameObject.CreatePrimitive(PrimitiveType.Sphere);
         go.name = "HazardTemplate";
         go.transform.SetParent(transform, false);
-        go.transform.localScale = Vector3.one * 1.2f;
+        go.transform.localScale = Vector3.one * 0.85f;
         go.GetComponent<Renderer>().sharedMaterial = _asteroidMat;
 
         Rigidbody rb = go.AddComponent<Rigidbody>();
@@ -226,12 +372,12 @@ public class SpaceshipSceneSetup : MonoBehaviour
 
     // ─── Systèmes ─────────────────────────────────────────────────────────────────
 
-    private void SetupGameManager(GameObject ship, GameObject foodTemplate, GameObject hazardTemplate)
+    private void SetupGameManager(GameObject ship, GameObject[] foodTemplates, GameObject hazardTemplate)
     {
         GameObject gmGO = new GameObject("SpaceGameManager");
         gmGO.transform.SetParent(transform, false);
         SpaceGameManager gm = gmGO.AddComponent<SpaceGameManager>();
-        gm.Init(ship.transform, foodTemplate, hazardTemplate);
+        gm.Init(ship.transform, foodTemplates, hazardTemplate);
     }
 
     private void SetupCameraFollow(Transform ship)
@@ -372,5 +518,56 @@ public class SpaceshipSceneSetup : MonoBehaviour
             m.renderQueue = 3000;
         }
         return m;
+    }
+}
+
+class SpaceShipCollisionDamage : MonoBehaviour
+{
+    private float _lastDamageTime;
+    private float _readyTime;
+
+    private void Start()
+    {
+        _readyTime = Time.time + 1.5f;
+    }
+
+    private void OnTriggerEnter(Collider other)
+    {
+        TryDamage(other);
+    }
+
+    private void OnCollisionEnter(Collision collision)
+    {
+        TryDamage(collision.collider);
+    }
+
+    private void TryDamage(Collider other)
+    {
+        if (Time.time < _readyTime) return;
+        if (other == null || other.transform.IsChildOf(transform)) return;
+        if (other.GetComponentInParent<XROrigin>() != null) return;
+        if (Camera.main != null && other.transform.root == Camera.main.transform.root) return;
+        if (other.GetComponentInParent<SpaceFoodPickup>() != null) return;
+        if (other.GetComponentInParent<SpaceHazardItem>() != null) return;
+        if (Time.time - _lastDamageTime < 0.4f) return;
+
+        _lastDamageTime = Time.time;
+        SpaceGameManager.Instance?.TakeDamage();
+    }
+}
+
+class SpaceEnvironmentFollow : MonoBehaviour
+{
+    private Transform _target;
+
+    public void Init(Transform target)
+    {
+        _target = target;
+    }
+
+    private void LateUpdate()
+    {
+        if (_target == null) return;
+        transform.position = _target.position;
     }
 }
