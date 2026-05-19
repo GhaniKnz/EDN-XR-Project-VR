@@ -1,5 +1,7 @@
 using TMPro;
 using UnityEngine;
+using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 public class SpaceGameHUD : MonoBehaviour
@@ -8,6 +10,8 @@ public class SpaceGameHUD : MonoBehaviour
     private static readonly Color HeartEmpty = new Color(0.45f,0.45f, 0.45f, 0.5f);
     private static readonly Color Accent     = new Color(0.3f, 0.9f,  1f);
     private static readonly Color GameOverC  = new Color(1f,   0.2f,  0.2f);
+    private static readonly Color BtnReset   = new Color(0.15f,0.55f, 1f,   0.88f);
+    private static readonly Color BtnMenu    = new Color(0.55f,0.55f, 0.55f,0.75f);
 
     private Camera              _cam;
     private TextMeshProUGUI[]   _hearts;
@@ -16,6 +20,11 @@ public class SpaceGameHUD : MonoBehaviour
     private TextMeshProUGUI     _distTMP;
     private TextMeshProUGUI     _speedTMP;
     private GameObject          _gameOverCanvas;
+
+    private InputAction _resetAction;
+    private InputAction _menuAction;
+
+    // ─── Init ────────────────────────────────────────────────────────────────────
 
     public void Init(Camera cam)
     {
@@ -27,6 +36,28 @@ public class SpaceGameHUD : MonoBehaviour
             SetLives(SpaceGameManager.Instance.Lives);
             SetScore(SpaceGameManager.Instance.Score);
         }
+    }
+
+    private void Awake()
+    {
+        // Bouton X (manette gauche) ou R clavier → restart
+        _resetAction = new InputAction("Btn_Reset", InputActionType.Button);
+        _resetAction.AddBinding("<XRController>{LeftHand}/primaryButton");
+        _resetAction.AddBinding("<Keyboard>/r");
+        _resetAction.Enable();
+
+        // Bouton Y (manette gauche) ou Escape → menu principal
+        _menuAction = new InputAction("Btn_Menu", InputActionType.Button);
+        _menuAction.AddBinding("<XRController>{LeftHand}/secondaryButton");
+        _menuAction.AddBinding("<XRController>{LeftHand}/menuButton");
+        _menuAction.AddBinding("<Keyboard>/escape");
+        _menuAction.Enable();
+    }
+
+    private void OnDestroy()
+    {
+        _resetAction?.Dispose();
+        _menuAction?.Dispose();
     }
 
     private void OnEnable()
@@ -49,6 +80,15 @@ public class SpaceGameHUD : MonoBehaviour
         SpaceGameManager.OnGameOver        -= ShowGameOver;
     }
 
+    private void Update()
+    {
+        if (_resetAction != null && _resetAction.WasPressedThisFrame())
+            SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+
+        if (_menuAction != null && _menuAction.WasPressedThisFrame())
+            SceneManager.LoadScene("MainMenu");
+    }
+
     // ─── Construction ────────────────────────────────────────────────────────────
 
     private void BuildHUD()
@@ -67,20 +107,18 @@ public class SpaceGameHUD : MonoBehaviour
         canvas.sortingOrder = 100;
 
         RectTransform cr = canvasGO.GetComponent<RectTransform>();
-        cr.sizeDelta = new Vector2(400f, 210f);
+        cr.sizeDelta = new Vector2(400f, 260f);
 
         CanvasScaler scaler = canvasGO.GetComponent<CanvasScaler>();
         scaler.uiScaleMode         = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = new Vector2(400f, 210f);
+        scaler.referenceResolution = new Vector2(400f, 260f);
 
-        // Fond arrondi
         Image bg = canvasGO.AddComponent<Image>();
         bg.sprite        = BuildRoundedSprite(64, 64, 14);
         bg.type          = Image.Type.Sliced;
         bg.color         = new Color(0f, 0.03f, 0.10f, 0.82f);
         bg.raycastTarget = false;
 
-        // Conteneur interne avec marges
         GameObject container = UIGo("Content", canvasGO.transform);
         RectTransform ct = container.GetComponent<RectTransform>();
         ct.anchorMin = Vector2.zero;
@@ -88,7 +126,7 @@ public class SpaceGameHUD : MonoBehaviour
         ct.offsetMin = new Vector2(16f, 10f);
         ct.offsetMax = new Vector2(-16f, -10f);
         VerticalLayoutGroup vl = container.AddComponent<VerticalLayoutGroup>();
-        vl.spacing              = 6f;
+        vl.spacing              = 5f;
         vl.childAlignment       = TextAnchor.UpperLeft;
         vl.childForceExpandWidth  = true;
         vl.childForceExpandHeight = false;
@@ -97,7 +135,7 @@ public class SpaceGameHUD : MonoBehaviour
         GameObject heartsRow = UIGo("Hearts", container.transform);
         heartsRow.GetComponent<RectTransform>().sizeDelta = new Vector2(0f, 44f);
         HorizontalLayoutGroup hl = heartsRow.AddComponent<HorizontalLayoutGroup>();
-        hl.spacing              = 5f;
+        hl.spacing = 5f;
         hl.childAlignment       = TextAnchor.MiddleLeft;
         hl.childForceExpandWidth  = false;
         hl.childForceExpandHeight = false;
@@ -118,7 +156,7 @@ public class SpaceGameHUD : MonoBehaviour
         GameObject statsRow = UIGo("Stats", container.transform);
         statsRow.GetComponent<RectTransform>().sizeDelta = new Vector2(0f, 32f);
         HorizontalLayoutGroup sl = statsRow.AddComponent<HorizontalLayoutGroup>();
-        sl.spacing              = 14f;
+        sl.spacing = 14f;
         sl.childAlignment       = TextAnchor.MiddleLeft;
         sl.childForceExpandWidth  = false;
         sl.childForceExpandHeight = false;
@@ -128,7 +166,19 @@ public class SpaceGameHUD : MonoBehaviour
         _distTMP  = MiniStat(statsRow.transform, "0.0 km", statCol);
         _speedTMP = MiniStat(statsRow.transform, "0 km/h", statCol);
 
-        // ── Canvas Game Over – centré séparément ──────────────────────────────────
+        // ── Ligne 4 : boutons Reset / Menu ────────────────────────────────────────
+        GameObject btnRow = UIGo("Buttons", container.transform);
+        btnRow.GetComponent<RectTransform>().sizeDelta = new Vector2(0f, 44f);
+        HorizontalLayoutGroup bl = btnRow.AddComponent<HorizontalLayoutGroup>();
+        bl.spacing = 10f;
+        bl.childAlignment       = TextAnchor.MiddleLeft;
+        bl.childForceExpandWidth  = false;
+        bl.childForceExpandHeight = false;
+
+        MakeButton(btnRow.transform, "[X] Restart", BtnReset, 160f);
+        MakeButton(btnRow.transform, "[Y] Menu",    BtnMenu,  130f);
+
+        // ── Canvas Game Over ──────────────────────────────────────────────────────
         _gameOverCanvas = new GameObject("GameOver_Canvas",
             typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler));
         _gameOverCanvas.transform.SetParent(_cam.transform, false);
@@ -140,13 +190,33 @@ public class SpaceGameHUD : MonoBehaviour
         goCanvas.renderMode  = RenderMode.WorldSpace;
         goCanvas.worldCamera = _cam;
         goCanvas.sortingOrder = 200;
-        _gameOverCanvas.GetComponent<RectTransform>().sizeDelta = new Vector2(1200f, 300f);
 
-        TextMeshProUGUI goTMP = MakeTMP(_gameOverCanvas.transform, "GAME OVER", 110, GameOverC, TextAlignmentOptions.Center);
-        RectTransform gor = goTMP.GetComponent<RectTransform>();
-        gor.anchorMin = Vector2.zero;
-        gor.anchorMax = Vector2.one;
-        gor.offsetMin = gor.offsetMax = Vector2.zero;
+        RectTransform goRect = _gameOverCanvas.GetComponent<RectTransform>();
+        goRect.sizeDelta = new Vector2(1200f, 380f);
+
+        GameObject goContent = UIGo("GOContent", _gameOverCanvas.transform);
+        RectTransform goct = goContent.GetComponent<RectTransform>();
+        goct.anchorMin = Vector2.zero; goct.anchorMax = Vector2.one;
+        goct.offsetMin = goct.offsetMax = Vector2.zero;
+        VerticalLayoutGroup govl = goContent.AddComponent<VerticalLayoutGroup>();
+        govl.childAlignment       = TextAnchor.MiddleCenter;
+        govl.childForceExpandWidth  = true;
+        govl.childForceExpandHeight = false;
+        govl.spacing = 14f;
+
+        TextMeshProUGUI goTMP = MakeTMP(goContent.transform, "GAME OVER", 110, GameOverC, TextAlignmentOptions.Center);
+        goTMP.GetComponent<RectTransform>().sizeDelta = new Vector2(0f, 160f);
+
+        // Boutons Game Over
+        GameObject goBtnRow = UIGo("GOButtons", goContent.transform);
+        goBtnRow.GetComponent<RectTransform>().sizeDelta = new Vector2(0f, 80f);
+        HorizontalLayoutGroup gobl = goBtnRow.AddComponent<HorizontalLayoutGroup>();
+        gobl.spacing = 30f;
+        gobl.childAlignment       = TextAnchor.MiddleCenter;
+        gobl.childForceExpandWidth  = false;
+        gobl.childForceExpandHeight = false;
+        MakeButton(goBtnRow.transform, "[X] Rejouer", BtnReset, 320f, 70f, 44);
+        MakeButton(goBtnRow.transform, "[Y] Menu",    BtnMenu,  230f, 70f, 44);
 
         _gameOverCanvas.SetActive(false);
     }
@@ -192,6 +262,26 @@ public class SpaceGameHUD : MonoBehaviour
 
     // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+    private void MakeButton(Transform parent, string label, Color col, float w, float h = 40f, int fontSize = 22)
+    {
+        GameObject go = UIGo(label, parent);
+        RectTransform rt = go.GetComponent<RectTransform>();
+        rt.sizeDelta = new Vector2(w, h);
+
+        Image img = go.AddComponent<Image>();
+        img.sprite        = BuildRoundedSprite(32, 32, 8);
+        img.type          = Image.Type.Sliced;
+        img.color         = col;
+        img.raycastTarget = false;
+
+        TextMeshProUGUI tmp = MakeTMP(go.transform, label, fontSize,
+            Color.white, TextAlignmentOptions.Center);
+        RectTransform tr = tmp.GetComponent<RectTransform>();
+        tr.anchorMin = Vector2.zero;
+        tr.anchorMax = Vector2.one;
+        tr.offsetMin = tr.offsetMax = Vector2.zero;
+    }
+
     private TextMeshProUGUI MiniStat(Transform parent, string txt, Color col)
     {
         TextMeshProUGUI t = MakeTMP(parent, txt, 22, col, TextAlignmentOptions.Left);
@@ -219,7 +309,6 @@ public class SpaceGameHUD : MonoBehaviour
         return go;
     }
 
-    // Génère un sprite Texture2D avec coins arrondis pour le fond du HUD
     private static Sprite BuildRoundedSprite(int w, int h, int r)
     {
         Texture2D tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
