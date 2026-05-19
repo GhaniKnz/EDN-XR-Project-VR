@@ -16,6 +16,7 @@ public class SpaceGameHUD : MonoBehaviour
     private Camera              _cam;
     private TextMeshProUGUI[]   _hearts;
     private TextMeshProUGUI     _scoreTMP;
+    private TextMeshProUGUI     _bestScoreTMP;
     private TextMeshProUGUI     _timerTMP;
     private TextMeshProUGUI     _distTMP;
     private TextMeshProUGUI     _speedTMP;
@@ -35,21 +36,21 @@ public class SpaceGameHUD : MonoBehaviour
         {
             SetLives(SpaceGameManager.Instance.Lives);
             SetScore(SpaceGameManager.Instance.Score);
+            SetBestScore(SpaceGameManager.Instance.BestScore);
         }
     }
 
     private void Awake()
     {
-        // Bouton X (manette gauche) ou R clavier → restart
+        // Bouton A (manette droite) ou R clavier -> restart
         _resetAction = new InputAction("Btn_Reset", InputActionType.Button);
-        _resetAction.AddBinding("<XRController>{LeftHand}/primaryButton");
+        _resetAction.AddBinding("<XRController>{RightHand}/primaryButton");
         _resetAction.AddBinding("<Keyboard>/r");
         _resetAction.Enable();
 
-        // Bouton Y (manette gauche) ou Escape → menu principal
+        // Bouton B (manette droite) ou Escape -> menu principal
         _menuAction = new InputAction("Btn_Menu", InputActionType.Button);
-        _menuAction.AddBinding("<XRController>{LeftHand}/secondaryButton");
-        _menuAction.AddBinding("<XRController>{LeftHand}/menuButton");
+        _menuAction.AddBinding("<XRController>{RightHand}/secondaryButton");
         _menuAction.AddBinding("<Keyboard>/escape");
         _menuAction.Enable();
     }
@@ -64,6 +65,7 @@ public class SpaceGameHUD : MonoBehaviour
     {
         SpaceGameManager.OnLivesChanged    += SetLives;
         SpaceGameManager.OnScoreChanged    += SetScore;
+        SpaceGameManager.OnBestScoreChanged += SetBestScore;
         SpaceGameManager.OnTimeChanged     += SetTimer;
         SpaceGameManager.OnDistanceChanged += SetDistance;
         SpaceGameManager.OnSpeedChanged    += SetSpeed;
@@ -74,6 +76,7 @@ public class SpaceGameHUD : MonoBehaviour
     {
         SpaceGameManager.OnLivesChanged    -= SetLives;
         SpaceGameManager.OnScoreChanged    -= SetScore;
+        SpaceGameManager.OnBestScoreChanged -= SetBestScore;
         SpaceGameManager.OnTimeChanged     -= SetTimer;
         SpaceGameManager.OnDistanceChanged -= SetDistance;
         SpaceGameManager.OnSpeedChanged    -= SetSpeed;
@@ -97,9 +100,9 @@ public class SpaceGameHUD : MonoBehaviour
         GameObject canvasGO = new GameObject("HUD_Canvas",
             typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
         canvasGO.transform.SetParent(_cam.transform, false);
-        canvasGO.transform.localPosition = new Vector3(0.30f, 0.17f, 1.8f);
+        canvasGO.transform.localPosition = new Vector3(0.52f, 0.28f, 1.6f);
         canvasGO.transform.localRotation = Quaternion.identity;
-        canvasGO.transform.localScale    = Vector3.one * 0.001f;
+        canvasGO.transform.localScale    = Vector3.one * 0.00145f;
 
         Canvas canvas = canvasGO.GetComponent<Canvas>();
         canvas.renderMode  = RenderMode.WorldSpace;
@@ -107,76 +110,87 @@ public class SpaceGameHUD : MonoBehaviour
         canvas.sortingOrder = 100;
 
         RectTransform cr = canvasGO.GetComponent<RectTransform>();
-        cr.sizeDelta = new Vector2(400f, 260f);
+        cr.sizeDelta = new Vector2(430f, 340f);
 
         CanvasScaler scaler = canvasGO.GetComponent<CanvasScaler>();
         scaler.uiScaleMode         = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = new Vector2(400f, 260f);
+        scaler.referenceResolution = new Vector2(430f, 340f);
 
         Image bg = canvasGO.AddComponent<Image>();
-        bg.sprite        = BuildRoundedSprite(64, 64, 14);
-        bg.type          = Image.Type.Sliced;
-        bg.color         = new Color(0f, 0.03f, 0.10f, 0.82f);
+        bg.sprite        = BuildRectSprite(4, 4);
+        bg.type          = Image.Type.Simple;
+        bg.color         = new Color(0f, 0.02f, 0.06f, 0.58f);
         bg.raycastTarget = false;
 
         GameObject container = UIGo("Content", canvasGO.transform);
         RectTransform ct = container.GetComponent<RectTransform>();
         ct.anchorMin = Vector2.zero;
         ct.anchorMax = Vector2.one;
-        ct.offsetMin = new Vector2(16f, 10f);
-        ct.offsetMax = new Vector2(-16f, -10f);
+        ct.offsetMin = new Vector2(16f, 12f);
+        ct.offsetMax = new Vector2(-16f, -12f);
         VerticalLayoutGroup vl = container.AddComponent<VerticalLayoutGroup>();
-        vl.spacing              = 5f;
+        vl.spacing              = 8f;
         vl.childAlignment       = TextAnchor.UpperLeft;
+        vl.childControlWidth    = true;
+        vl.childControlHeight   = false;
         vl.childForceExpandWidth  = true;
         vl.childForceExpandHeight = false;
 
         // ── Ligne 1 : cœurs ──────────────────────────────────────────────────────
         GameObject heartsRow = UIGo("Hearts", container.transform);
-        heartsRow.GetComponent<RectTransform>().sizeDelta = new Vector2(0f, 44f);
+        heartsRow.GetComponent<RectTransform>().sizeDelta = new Vector2(0f, 42f);
         HorizontalLayoutGroup hl = heartsRow.AddComponent<HorizontalLayoutGroup>();
-        hl.spacing = 5f;
+        hl.spacing = 4f;
         hl.childAlignment       = TextAnchor.MiddleLeft;
+        hl.childControlWidth    = false;
+        hl.childControlHeight   = false;
         hl.childForceExpandWidth  = false;
         hl.childForceExpandHeight = false;
 
         _hearts = new TextMeshProUGUI[5];
         for (int i = 0; i < 5; i++)
         {
-            TextMeshProUGUI h = MakeTMP(heartsRow.transform, "♥", 34, HeartFull, TextAlignmentOptions.Center);
-            h.GetComponent<RectTransform>().sizeDelta = new Vector2(34f, 40f);
+            TextMeshProUGUI h = MakeTMP(heartsRow.transform, "♥", 28, HeartFull, TextAlignmentOptions.Center);
+            h.GetComponent<RectTransform>().sizeDelta = new Vector2(28f, 38f);
             _hearts[i] = h;
         }
 
         // ── Ligne 2 : score ───────────────────────────────────────────────────────
-        _scoreTMP = MakeTMP(container.transform, "0 pts", 42, Accent, TextAlignmentOptions.Left);
+        TextMeshProUGUI scoreLabel = MakeTMP(container.transform, "SCORE", 16, new Color(0.68f, 0.92f, 1f, 0.78f), TextAlignmentOptions.Left);
+        scoreLabel.GetComponent<RectTransform>().sizeDelta = new Vector2(0f, 22f);
+
+        _scoreTMP = MakeTMP(container.transform, "0 pts", 40, Accent, TextAlignmentOptions.Left);
         _scoreTMP.GetComponent<RectTransform>().sizeDelta = new Vector2(0f, 52f);
 
         // ── Ligne 3 : stats ───────────────────────────────────────────────────────
         GameObject statsRow = UIGo("Stats", container.transform);
-        statsRow.GetComponent<RectTransform>().sizeDelta = new Vector2(0f, 32f);
-        HorizontalLayoutGroup sl = statsRow.AddComponent<HorizontalLayoutGroup>();
-        sl.spacing = 14f;
-        sl.childAlignment       = TextAnchor.MiddleLeft;
-        sl.childForceExpandWidth  = false;
-        sl.childForceExpandHeight = false;
+        statsRow.GetComponent<RectTransform>().sizeDelta = new Vector2(0f, 92f);
+        GridLayoutGroup sl = statsRow.AddComponent<GridLayoutGroup>();
+        sl.cellSize = new Vector2(194f, 40f);
+        sl.spacing = new Vector2(8f, 8f);
+        sl.childAlignment = TextAnchor.UpperLeft;
+        sl.constraint = GridLayoutGroup.Constraint.FixedColumnCount;
+        sl.constraintCount = 2;
 
         Color statCol = new Color(0.60f, 0.88f, 1f);
-        _timerTMP = MiniStat(statsRow.transform, "00:00",  statCol);
-        _distTMP  = MiniStat(statsRow.transform, "0.0 km", statCol);
-        _speedTMP = MiniStat(statsRow.transform, "0 km/h", statCol);
+        _timerTMP = MiniStat(statsRow.transform, "TEMPS", "00:00",  statCol);
+        _distTMP  = MiniStat(statsRow.transform, "DISTANCE", "0.0 km", statCol);
+        _speedTMP = MiniStat(statsRow.transform, "VITESSE", "0 km/h", statCol);
+        _bestScoreTMP = MiniStat(statsRow.transform, "MAX", "0 pts", statCol);
 
         // ── Ligne 4 : boutons Reset / Menu ────────────────────────────────────────
         GameObject btnRow = UIGo("Buttons", container.transform);
-        btnRow.GetComponent<RectTransform>().sizeDelta = new Vector2(0f, 44f);
+        btnRow.GetComponent<RectTransform>().sizeDelta = new Vector2(0f, 48f);
         HorizontalLayoutGroup bl = btnRow.AddComponent<HorizontalLayoutGroup>();
-        bl.spacing = 10f;
+        bl.spacing = 6f;
         bl.childAlignment       = TextAnchor.MiddleLeft;
+        bl.childControlWidth    = false;
+        bl.childControlHeight   = false;
         bl.childForceExpandWidth  = false;
         bl.childForceExpandHeight = false;
 
-        MakeButton(btnRow.transform, "[X] Restart", BtnReset, 160f);
-        MakeButton(btnRow.transform, "[Y] Menu",    BtnMenu,  130f);
+        MakeButton(btnRow.transform, "[A] Restart", BtnReset, 154f, 42f, 20);
+        MakeButton(btnRow.transform, "[B] Menu",    BtnMenu,  122f, 42f, 20);
 
         // ── Canvas Game Over ──────────────────────────────────────────────────────
         _gameOverCanvas = new GameObject("GameOver_Canvas",
@@ -215,8 +229,8 @@ public class SpaceGameHUD : MonoBehaviour
         gobl.childAlignment       = TextAnchor.MiddleCenter;
         gobl.childForceExpandWidth  = false;
         gobl.childForceExpandHeight = false;
-        MakeButton(goBtnRow.transform, "[X] Rejouer", BtnReset, 320f, 70f, 44);
-        MakeButton(goBtnRow.transform, "[Y] Menu",    BtnMenu,  230f, 70f, 44);
+        MakeButton(goBtnRow.transform, "[A] Rejouer", BtnReset, 320f, 70f, 44);
+        MakeButton(goBtnRow.transform, "[B] Menu",    BtnMenu,  230f, 70f, 44);
 
         _gameOverCanvas.SetActive(false);
     }
@@ -234,6 +248,11 @@ public class SpaceGameHUD : MonoBehaviour
     private void SetScore(int score)
     {
         if (_scoreTMP != null) _scoreTMP.text = score + " pts";
+    }
+
+    private void SetBestScore(int score)
+    {
+        if (_bestScoreTMP != null) _bestScoreTMP.text = score + " pts";
     }
 
     private void SetTimer(float s)
@@ -282,11 +301,30 @@ public class SpaceGameHUD : MonoBehaviour
         tr.offsetMin = tr.offsetMax = Vector2.zero;
     }
 
-    private TextMeshProUGUI MiniStat(Transform parent, string txt, Color col)
+    private TextMeshProUGUI MiniStat(Transform parent, string label, string txt, Color col)
     {
-        TextMeshProUGUI t = MakeTMP(parent, txt, 22, col, TextAlignmentOptions.Left);
-        t.GetComponent<RectTransform>().sizeDelta = new Vector2(114f, 30f);
-        return t;
+        GameObject cell = UIGo(label, parent);
+        cell.GetComponent<RectTransform>().sizeDelta = new Vector2(194f, 40f);
+
+        VerticalLayoutGroup layout = cell.AddComponent<VerticalLayoutGroup>();
+        layout.padding = new RectOffset(0, 0, 0, 0);
+        layout.spacing = 0f;
+        layout.childAlignment = TextAnchor.MiddleLeft;
+        layout.childControlWidth = true;
+        layout.childControlHeight = false;
+        layout.childForceExpandWidth = true;
+        layout.childForceExpandHeight = false;
+
+        TextMeshProUGUI l = MakeTMP(cell.transform, label, 12, new Color(0.68f, 0.92f, 1f, 0.72f), TextAlignmentOptions.Left);
+        l.GetComponent<RectTransform>().sizeDelta = new Vector2(0f, 14f);
+
+        TextMeshProUGUI value = MakeTMP(cell.transform, txt, 21, col, TextAlignmentOptions.Left);
+        value.enableAutoSizing = true;
+        value.fontSizeMin = 15;
+        value.fontSizeMax = 21;
+        value.enableWordWrapping = false;
+        value.GetComponent<RectTransform>().sizeDelta = new Vector2(0f, 25f);
+        return value;
     }
 
     private TextMeshProUGUI MakeTMP(Transform parent, string txt, int size, Color col, TextAlignmentOptions align)
@@ -307,6 +345,18 @@ public class SpaceGameHUD : MonoBehaviour
         GameObject go = new GameObject(n, typeof(RectTransform));
         go.transform.SetParent(parent, false);
         return go;
+    }
+
+    private static Sprite BuildRectSprite(int w, int h)
+    {
+        Texture2D tex = new Texture2D(w, h, TextureFormat.RGBA32, false);
+        Color[] pix = new Color[w * h];
+        for (int i = 0; i < pix.Length; i++)
+            pix[i] = Color.white;
+        tex.SetPixels(pix);
+        tex.Apply();
+        return Sprite.Create(tex, new Rect(0, 0, w, h), new Vector2(0.5f, 0.5f),
+            1f, 0, SpriteMeshType.FullRect);
     }
 
     private static Sprite BuildRoundedSprite(int w, int h, int r)
