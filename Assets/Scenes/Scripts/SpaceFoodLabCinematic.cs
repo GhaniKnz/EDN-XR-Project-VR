@@ -181,8 +181,9 @@ public class SpaceFoodLabCinematic : MonoBehaviour
         RectTransform crawlContent = CreateIntroCrawl();
         float time = 0f;
 
-        Vector2 start = new Vector2(0f, -760f);
-        Vector2 end = new Vector2(0f, 1220f);
+        // Départ sous le canvas, remontée vers le haut – défilement droit bas→haut
+        Vector2 start = new Vector2(0f, -1800f);
+        Vector2 end   = new Vector2(0f,  1100f);
         crawlContent.anchoredPosition = start;
 
         while (time < introCrawlDuration)
@@ -195,7 +196,7 @@ public class SpaceFoodLabCinematic : MonoBehaviour
             crawlContent.anchoredPosition = Vector2.Lerp(start, end, t);
 
             if (crawlGroup != null)
-                crawlGroup.alpha = t > 0.92f ? Mathf.InverseLerp(1f, 0.92f, t) : 1f;
+                crawlGroup.alpha = t > 0.90f ? Mathf.InverseLerp(1f, 0.90f, t) : 1f;
 
             yield return null;
         }
@@ -203,76 +204,88 @@ public class SpaceFoodLabCinematic : MonoBehaviour
 
     private RectTransform CreateIntroCrawl()
     {
-        GameObject canvasGO = new GameObject("IntroCrawlCanvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster), typeof(CanvasGroup));
+        // Canvas VR WorldSpace parenté à la caméra
+        GameObject canvasGO = new GameObject("IntroCrawlCanvas",
+            typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster), typeof(CanvasGroup));
+        canvasGO.transform.SetParent(cam.transform, false);
+        canvasGO.transform.localPosition = new Vector3(0f, 0f, 2f);
+        canvasGO.transform.localRotation = Quaternion.identity;
+        canvasGO.transform.localScale    = Vector3.one * 0.00165f;
+
         Canvas canvas = canvasGO.GetComponent<Canvas>();
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.renderMode  = RenderMode.WorldSpace;
+        canvas.worldCamera = cam;
         canvas.sortingOrder = 998;
 
-        CanvasScaler scaler = canvasGO.GetComponent<CanvasScaler>();
-        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = new Vector2(1920f, 1080f);
+        canvasGO.GetComponent<CanvasScaler>().uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+        canvasGO.GetComponent<CanvasScaler>().referenceResolution = new Vector2(1920f, 1080f);
+        canvasGO.GetComponent<RectTransform>().sizeDelta = new Vector2(1920f, 1080f);
 
         crawlGroup = canvasGO.GetComponent<CanvasGroup>();
         crawlGroup.alpha = 1f;
 
-        GameObject readabilityPanel = new GameObject("CrawlReadabilityPanel", typeof(RectTransform), typeof(Image));
-        readabilityPanel.transform.SetParent(canvasGO.transform, false);
-        RectTransform panelRect = readabilityPanel.GetComponent<RectTransform>();
-        panelRect.anchorMin = new Vector2(0.5f, 0.5f);
-        panelRect.anchorMax = new Vector2(0.5f, 0.5f);
-        panelRect.pivot = new Vector2(0.5f, 0.5f);
-        panelRect.anchoredPosition = new Vector2(0f, -40f);
-        panelRect.sizeDelta = new Vector2(1260f, 1080f);
+        // Masque : fenêtre visible centrée (70 % de largeur, pleine hauteur)
+        GameObject maskGO = new GameObject("ScrollMask",
+            typeof(RectTransform), typeof(Image), typeof(Mask));
+        maskGO.transform.SetParent(canvasGO.transform, false);
+        RectTransform maskRect = maskGO.GetComponent<RectTransform>();
+        maskRect.anchorMin = new Vector2(0.15f, 0f);
+        maskRect.anchorMax = new Vector2(0.85f, 1f);
+        maskRect.offsetMin = maskRect.offsetMax = Vector2.zero;
+        maskGO.GetComponent<Image>().color          = new Color(0f, 0f, 0f, 0.5f);
+        maskGO.GetComponent<Image>().raycastTarget  = false;
+        maskGO.GetComponent<Mask>().showMaskGraphic = true; // fond sombre visible
 
-        Image panelImage = readabilityPanel.GetComponent<Image>();
-        panelImage.color = new Color(0f, 0f, 0f, 0.38f);
-        panelImage.raycastTarget = false;
-
+        // Contenu scrollable (se déplace verticalement dans le masque)
         GameObject content = new GameObject("CrawlContent", typeof(RectTransform));
-        content.transform.SetParent(canvasGO.transform, false);
+        content.transform.SetParent(maskGO.transform, false);
         RectTransform contentRect = content.GetComponent<RectTransform>();
-        contentRect.anchorMin = new Vector2(0.5f, 0.5f);
-        contentRect.anchorMax = new Vector2(0.5f, 0.5f);
-        contentRect.pivot = new Vector2(0.5f, 0.5f);
-        contentRect.sizeDelta = new Vector2(1120f, 1400f);
-        contentRect.localRotation = Quaternion.Euler(62f, 0f, 0f);
+        contentRect.anchorMin = new Vector2(0f, 0f);
+        contentRect.anchorMax = new Vector2(1f, 0f);
+        contentRect.pivot     = new Vector2(0.5f, 0f);
+        contentRect.sizeDelta = new Vector2(0f, 1800f);
+        // Pas de rotation → texte droit
 
-        GameObject titleGO = new GameObject("CrawlTitle", typeof(RectTransform), typeof(TextMeshProUGUI));
+        // Titre
+        GameObject titleGO = new GameObject("CrawlTitle",
+            typeof(RectTransform), typeof(TextMeshProUGUI));
         titleGO.transform.SetParent(contentRect, false);
         RectTransform titleRect = titleGO.GetComponent<RectTransform>();
-        titleRect.anchorMin = new Vector2(0.5f, 1f);
-        titleRect.anchorMax = new Vector2(0.5f, 1f);
-        titleRect.pivot = new Vector2(0.5f, 1f);
-        titleRect.anchoredPosition = Vector2.zero;
-        titleRect.sizeDelta = new Vector2(1120f, 150f);
+        titleRect.anchorMin        = new Vector2(0f, 1f);
+        titleRect.anchorMax        = new Vector2(1f, 1f);
+        titleRect.pivot            = new Vector2(0.5f, 1f);
+        titleRect.anchoredPosition = new Vector2(0f, -24f);
+        titleRect.sizeDelta        = new Vector2(0f, 160f);
 
         TextMeshProUGUI title = titleGO.GetComponent<TextMeshProUGUI>();
-        title.text = introTitle;
-        title.fontSize = 72f;
-        title.fontStyle = FontStyles.Bold;
-        title.alignment = TextAlignmentOptions.Center;
-        title.color = new Color(1f, 0.84f, 0.28f, 1f);
+        title.text            = introTitle;
+        title.fontSize        = 72f;
+        title.fontStyle       = FontStyles.Bold;
+        title.alignment       = TextAlignmentOptions.Center;
+        title.color           = new Color(1f, 0.84f, 0.28f, 1f);
         title.characterSpacing = 8f;
-        title.raycastTarget = false;
+        title.raycastTarget   = false;
 
-        GameObject bodyGO = new GameObject("CrawlBody", typeof(RectTransform), typeof(TextMeshProUGUI));
+        // Corps du texte
+        GameObject bodyGO = new GameObject("CrawlBody",
+            typeof(RectTransform), typeof(TextMeshProUGUI));
         bodyGO.transform.SetParent(contentRect, false);
         RectTransform bodyRect = bodyGO.GetComponent<RectTransform>();
-        bodyRect.anchorMin = new Vector2(0.5f, 1f);
-        bodyRect.anchorMax = new Vector2(0.5f, 1f);
-        bodyRect.pivot = new Vector2(0.5f, 1f);
-        bodyRect.anchoredPosition = new Vector2(0f, -170f);
-        bodyRect.sizeDelta = new Vector2(980f, 1220f);
+        bodyRect.anchorMin        = new Vector2(0f, 1f);
+        bodyRect.anchorMax        = new Vector2(1f, 1f);
+        bodyRect.pivot            = new Vector2(0.5f, 1f);
+        bodyRect.anchoredPosition = new Vector2(0f, -210f);
+        bodyRect.sizeDelta        = new Vector2(-60f, 1600f);
 
         TextMeshProUGUI body = bodyGO.GetComponent<TextMeshProUGUI>();
-        body.text = introText;
-        body.fontSize = 46f;
-        body.fontStyle = FontStyles.Bold;
-        body.alignment = TextAlignmentOptions.Justified;
-        body.color = new Color(1f, 0.84f, 0.28f, 1f);
-        body.lineSpacing = 12f;
+        body.text              = introText;
+        body.fontSize          = 44f;
+        body.fontStyle         = FontStyles.Normal;
+        body.alignment         = TextAlignmentOptions.Left;
+        body.color             = new Color(1f, 0.90f, 0.70f, 1f);
+        body.lineSpacing       = 14f;
         body.enableWordWrapping = true;
-        body.raycastTarget = false;
+        body.raycastTarget     = false;
 
         return contentRect;
     }
@@ -377,13 +390,24 @@ public class SpaceFoodLabCinematic : MonoBehaviour
     private void CreateFadeOverlay()
     {
         GameObject canvasGO = new GameObject("CinematicFadeCanvas", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
+
+        // VR : WorldSpace parenté à la caméra pour être visible dans le casque
+        canvasGO.transform.SetParent(cam.transform, false);
+        canvasGO.transform.localPosition = new Vector3(0f, 0f, 0.6f);
+        canvasGO.transform.localRotation = Quaternion.identity;
+        canvasGO.transform.localScale = Vector3.one * 0.00165f;
+
         Canvas canvas = canvasGO.GetComponent<Canvas>();
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+        canvas.renderMode = RenderMode.WorldSpace;
+        canvas.worldCamera = cam;
         canvas.sortingOrder = 999;
 
         CanvasScaler scaler = canvasGO.GetComponent<CanvasScaler>();
         scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
         scaler.referenceResolution = new Vector2(1920f, 1080f);
+
+        RectTransform canvasRect = canvasGO.GetComponent<RectTransform>();
+        canvasRect.sizeDelta = new Vector2(1920f, 1080f);
 
         GameObject fadeGO = new GameObject("Fade", typeof(RectTransform), typeof(Image), typeof(CanvasGroup));
         fadeGO.transform.SetParent(canvasGO.transform, false);
